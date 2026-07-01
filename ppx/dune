@@ -1,0 +1,7 @@
+(library
+ (name ppx_ocaml_dspy)
+ (public_name ppx_ocaml_dspy)
+ (kind ppx_rewriter)
+ (libraries ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot)))

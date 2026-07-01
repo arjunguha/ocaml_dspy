@@ -1,0 +1,33 @@
+(test
+ (name test_core_ocaml_dspy)
+ (modules test_core_ocaml_dspy)
+ (libraries alcotest ocaml_dspy))
+
+(library
+ (name ocaml_dspy_test_predict_suite)
+ (modules test_predict_suite)
+ (libraries alcotest ocaml_dspy eio_main)
+ (preprocess
+  (pps ppx_ocaml_dspy)))
+
+(test
+ (name test_mock_ocaml_dspy)
+ (modules test_mock_ocaml_dspy)
+ (libraries alcotest ocaml_dspy eio_main ocaml_dspy_test_predict_suite))
+
+(test
+ (name test_exceptions_ocaml_dspy)
+ (modules test_exceptions_ocaml_dspy)
+ (libraries alcotest ocaml_dspy eio_main)
+ (preprocess
+  (pps ppx_ocaml_dspy)))
+
+(test
+ (name test_ppx_ocaml_dspy_errors)
+ (modules test_ppx_ocaml_dspy_errors)
+ (libraries alcotest ppxlib ppx_ocaml_dspy))
+
+(test
+ (name test_live_openai_chat_lm)
+ (modules test_live_openai_chat_lm)
+ (libraries alcotest ocaml_dspy eio_main ocaml_dspy_test_predict_suite))

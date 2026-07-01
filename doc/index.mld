@@ -1,0 +1,168 @@
+{0 OCaml DSPy}
+
+OCaml DSPy is a small typed interface for DSPy-style language-model programs.
+Define a signature, bind it to an LM, and call either {!module:Ocaml_dspy.Predict}
+or {!module:Ocaml_dspy.Chain_of_thought}.
+
+{1 Dune setup}
+
+Use the runtime library and enable the PPX in code that declares signatures or
+generated predictors.
+
+{[
+(executable
+ (name app)
+ (libraries ocaml_dspy eio_main)
+ (preprocess
+  (pps ppx_ocaml_dspy)))
+]}
+
+{1 PPX program}
+
+The [%dspy.signature] extension expands to a module containing [t_in], [t_out],
+typed field witnesses, [signature], [encode], and [decode]. The
+[%dspy.predict] extension builds a typed wrapper with record and labeled
+entrypoints.
+
+This is a complete [app.ml] using the PPX wrapper. The Eio runtime and switch
+are initialized once in [main], then passed explicitly to the generated call.
+
+{[
+open Ocaml_dspy
+
+let lm = (module Openai_chat_lm : Lm)
+
+module QA = [%dspy.signature
+  "Answer questions concisely."
+
+  type t_in = {
+    question : string [@desc "Question to answer"];
+  }
+
+  type t_out = {
+    answer : string [@desc "Concise answer"];
+  }
+]
+
+module QAPredict = [%dspy.predict (module QA) ~lm]
+
+let main ~sw ~env =
+  let output =
+    QAPredict.call ~sw ~env
+      ~question:"What is the capital of France?"
+  in
+  print_endline output.answer
+
+let () =
+  Eio_main.run @@ fun env ->
+  Eio.Switch.run @@ fun sw ->
+  main ~sw ~env
+]}
+
+{1 OpenAI-compatible LM setup}
+
+{!module:Ocaml_dspy.Openai_chat_lm} reads these environment variables:
+
+{[
+export OPENAI_API_BASE="https://api.openai.com/v1"
+export OPENAI_API_KEY="..."
+]}
+
+[OPENAI_API_BASE] defaults to [http://localhost:4000/v1], which is useful for
+LiteLLM-compatible local gateways. The module default model is [gpt-5-nano];
+pass [~model] to {!val:Ocaml_dspy.Lm_request.make} to override it per request.
+
+{[
+let lm = (module Ocaml_dspy.Openai_chat_lm : Ocaml_dspy.Lm)
+]}
+
+{1 Non-PPX Predict program}
+
+Use {!module:Ocaml_dspy.Predict} directly when you want explicit control over
+encoding and decoding. This example avoids the PPX entirely and constructs the
+signature fields manually.
+
+{[
+open Ocaml_dspy
+
+let question =
+  Signature.input ~desc:"Question to answer" "question" Type.string
+
+let answer =
+  Signature.output ~desc:"Concise answer" "answer" Type.string
+
+let signature =
+  Signature.make
+    ~instructions:"Answer questions concisely."
+    ~inputs:[ Signature.Packed_input question ]
+    ~outputs:[ Signature.Packed_output answer ]
+    ()
+
+let lm = (module Openai_chat_lm : Lm)
+
+let main ~sw ~env =
+  let predictor = Predict.create ~lm signature in
+  let inputs =
+    Values.empty
+    |> Values.set question "What is the capital of France?"
+  in
+  let prediction = Predict.forward ~sw ~env predictor inputs in
+  print_endline (Prediction.get answer prediction)
+
+let () =
+  Eio_main.run @@ fun env ->
+  Eio.Switch.run @@ fun sw ->
+  main ~sw ~env
+]}
+
+{1 Chain-of-thought PPX program}
+
+{!module:Ocaml_dspy.Chain_of_thought} prepends a [reasoning : string] output
+field and returns the reasoning separately from the decoded signature output.
+The PPX wrapper mirrors the Predict wrapper.
+
+{[
+open Ocaml_dspy
+
+let lm = (module Openai_chat_lm : Lm)
+
+module QA = [%dspy.signature
+  "Answer questions concisely."
+
+  type t_in = {
+    question : string [@desc "Question to answer"];
+  }
+
+  type t_out = {
+    answer : string [@desc "Concise answer"];
+  }
+]
+
+module QACoT = [%dspy.chain_of_thought (module QA) ~lm]
+
+let main ~sw ~env =
+  let result =
+    QACoT.call ~sw ~env
+      ~question:"What is the capital of France?"
+  in
+  Printf.printf "Reasoning: %s\nAnswer: %s\n"
+    result.reasoning result.output.answer
+
+let () =
+  Eio_main.run @@ fun env ->
+  Eio.Switch.run @@ fun sw ->
+  main ~sw ~env
+]}
+
+{1 Exceptions}
+
+Most library validation and parsing failures are reported as
+{!exception:Ocaml_dspy.Dspy_error.Error}. This includes empty or duplicate
+signature field names, input values that do not match a signature, missing
+prediction fields, malformed marker-delimited LM responses, and invalid
+OpenAI-compatible JSON responses.
+
+Calls through {!module:Ocaml_dspy.Predict},
+{!module:Ocaml_dspy.Chain_of_thought}, and
+{!module:Ocaml_dspy.Openai_chat_lm} may also propagate exceptions raised by
+custom codecs, the configured LM, Eio, Cohttp, TLS, DNS, or the network stack.

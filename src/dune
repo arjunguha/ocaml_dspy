@@ -1,0 +1,14 @@
+(library
+ (name ocaml_dspy)
+ (public_name ocaml_dspy)
+ (libraries
+  yojson
+  eio
+  eio.unix
+  cohttp-eio
+  tls-eio
+  ca-certs
+  mirage-crypto-rng.unix
+  hmap
+  domain-name
+  uri))
