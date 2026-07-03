@@ -83,7 +83,10 @@ module Make (Backend : Backend) = struct
     let module Lm = (val Backend.lm : Lm) in
     let request =
       Lm_request.make ~model:Lm.model
-        [ Lm_request.text `User "What is 2 + 2?" ]
+        [
+          Lm_request.text `User
+            "Compute 2 + 2. Reply with only the final integer, with no equation, words, punctuation, Markdown, or explanation.";
+        ]
     in
     let response = Lm.forward ~sw ~env request in
     Alcotest.(check string)

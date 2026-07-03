@@ -13,6 +13,21 @@
 include Lm.S
 (** @inline *)
 
+module type Config = sig
+  val base_url : string
+  (** OpenAI-compatible API base URL, without the [/chat/completions] suffix. *)
+
+  val api_key : string option
+  (** Optional API key sent as a Bearer token. *)
+
+  val model : string
+  (** Model name used when requests do not override it. *)
+end
+
+module Make (_ : Config) : Lm.S
+(** Build an OpenAI-compatible LM from explicit configuration instead of
+    [OPENAI_API_BASE] and [OPENAI_API_KEY]. *)
+
 val request_to_yojson : model:string -> Lm_request.t -> Yojson.Safe.t
 (** [request_to_yojson ~model request] converts [request] to Chat Completions
     JSON, using [model] when [request.model] is absent. *)

@@ -1,5 +1,11 @@
 let () = Mirage_crypto_rng_unix.use_default ()
 
+module type Config = sig
+  val base_url : string
+  val api_key : string option
+  val model : string
+end
+
 let model = "gpt-5-nano"
 
 let role_to_string = function
@@ -112,10 +118,11 @@ let api_key () =
   | Some key when String.trim key <> "" -> Some key
   | _ -> None
 
-let endpoint () =
-  let base = base_url () in
+let endpoint_of_base_url base =
   let base = if String.ends_with ~suffix:"/" base then String.sub base 0 (String.length base - 1) else base in
   Uri.of_string (base ^ "/chat/completions")
+
+let endpoint () = endpoint_of_base_url (base_url ())
 
 let tls_authenticator () =
   match Ca_certs.authenticator () with
@@ -140,9 +147,9 @@ let https_wrapper uri flow =
   in
   Tls_eio.client_of_flow config ~host flow
 
-let cohttp_post ~sw ~env ~body uri =
+let cohttp_post ?api_key ~sw ~env ~body uri =
   let headers =
-    match api_key () with
+    match api_key with
     | None -> [ ("content-type", "application/json") ]
     | Some key ->
         [
@@ -167,5 +174,19 @@ let cohttp_post ~sw ~env ~body uri =
 let forward ~sw ~env request =
   let body = request_to_yojson ~model request |> Yojson.Safe.to_string in
   let uri = endpoint () in
-  let response_text = cohttp_post ~sw ~env ~body uri in
+  let response_text = cohttp_post ?api_key:(api_key ()) ~sw ~env ~body uri in
   response_of_string response_text
+
+let forward_with ?api_key ~base_url ~model ~sw ~env request =
+  let body = request_to_yojson ~model request |> Yojson.Safe.to_string in
+  let uri = endpoint_of_base_url base_url in
+  let response_text = cohttp_post ?api_key ~sw ~env ~body uri in
+  response_of_string response_text
+
+module Make (Config : Config) = struct
+  let model = Config.model
+
+  let forward ~sw ~env request =
+    forward_with ?api_key:Config.api_key ~base_url:Config.base_url ~model
+      ~sw ~env request
+end
